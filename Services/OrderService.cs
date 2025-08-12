@@ -1,44 +1,49 @@
 ﻿using ProvaPub.Models;
 using ProvaPub.Repository;
+using ProvaPub.Services;
 
-namespace ProvaPub.Services
+public class OrderService
 {
-	public class OrderService
-	{
-        TestDbContext _ctx;
+    private readonly TestDbContext _ctx;
+    private readonly IDictionary<string, IPaymentMethod> _paymentMethods;
 
-        public OrderService(TestDbContext ctx)
+    public OrderService(TestDbContext ctx)
+    {
+        _ctx = ctx;
+
+        // Registrar os métodos disponíveis
+        _paymentMethods = new Dictionary<string, IPaymentMethod>(StringComparer.OrdinalIgnoreCase)
         {
-            _ctx = ctx;
-        }
+            { "pix", new PixPayment() },
+            { "creditcard", new CreditCardPayment() },
+            { "paypal", new PaypalPayment() }
+        };
+    }
 
-        public async Task<Order> PayOrder(string paymentMethod, decimal paymentValue, int customerId)
-		{
-			if (paymentMethod == "pix")
-			{
-				//Faz pagamento...
-			}
-			else if (paymentMethod == "creditcard")
-			{
-				//Faz pagamento...
-			}
-			else if (paymentMethod == "paypal")
-			{
-				//Faz pagamento...
-			}
+    public async Task<Order> PayOrder(string paymentMethod, decimal paymentValue, int customerId)
+    {
+        if (customerId <= 0)
+            throw new ArgumentException("CustomerId inválido.");
 
-			return await InsertOrder(new Order() //Retorna o pedido para o controller
-            {
-                Value = paymentValue
-            });
+        if (!_paymentMethods.TryGetValue(paymentMethod, out var paymentProcessor))
+            throw new ArgumentException("Método de pagamento inválido.");
 
+        await paymentProcessor.PayAsync(paymentValue, customerId);
 
-		}
-
-		public async Task<Order> InsertOrder(Order order)
+        var order = new Order()
         {
-			//Insere pedido no banco de dados
-			return (await _ctx.Orders.AddAsync(order)).Entity;
-        }
-	}
+            Value = paymentValue,
+            CustomerId = customerId,
+            OrderDate = DateTime.UtcNow // salva em UTC
+        };
+
+        return await InsertOrder(order);
+    }
+
+    public async Task<Order> InsertOrder(Order order)
+    {
+        var entityEntry = await _ctx.Orders.AddAsync(order);
+        await _ctx.SaveChangesAsync();
+        return entityEntry.Entity;
+    }
 }

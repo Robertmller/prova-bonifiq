@@ -6,7 +6,6 @@ using ProvaPub.Services;
 
 namespace ProvaPub.Controllers
 {
-
     /// <summary>
     /// Esse teste simula um pagamento de uma compra.
     /// O método PayOrder aceita diversas formas de pagamento. Dentro desse método é feita uma estrutura de diversos "if" para cada um deles.
@@ -17,19 +16,30 @@ namespace ProvaPub.Controllers
     /// Demonstre como você faria isso.
     /// </summary>
     [ApiController]
-	[Route("[controller]")]
-	public class Parte3Controller :  ControllerBase
-	{
-		[HttpGet("orders")]
-		public async Task<Order> PlaceOrder(string paymentMethod, decimal paymentValue, int customerId)
-		{
-            var contextOptions = new DbContextOptionsBuilder<TestDbContext>()
-    .UseSqlServer(@"Server=(localdb)\mssqllocaldb;Database=Teste;Trusted_Connection=True;")
-    .Options;
+    [Route("[controller]")]
+    public class Parte3Controller : ControllerBase
+    {
+        private readonly TestDbContext _context;
 
-            using var context = new TestDbContext(contextOptions);
+        public Parte3Controller(TestDbContext context)
+        {
+            _context = context;
+        }
 
-            return await new OrderService(context).PayOrder(paymentMethod, paymentValue, customerId);
-		}
-	}
+        [HttpGet("orders")]
+        public async Task<ActionResult<Order>> PlaceOrder(string paymentMethod, decimal paymentValue, int? customerId)
+        {
+            if (customerId == null || customerId <= 0)
+            {
+                return BadRequest("CustomerId inválido ou não informado.");
+            }
+
+            var service = new OrderService(_context);
+            var order = await service.PayOrder(paymentMethod, paymentValue, customerId.Value);
+
+            order.OrderDate = TimeZoneInfo.ConvertTimeFromUtc(order.OrderDate, TimeZoneInfo.FindSystemTimeZoneById("E. South America Standard Time"));
+
+            return Ok(order);
+        }
+    }
 }
